@@ -1,0 +1,6 @@
+__pycache__/
+.venv/
+.pytest_cache/
+# The datamodels the workflows check against.
+.datamodels/
+uv.lock

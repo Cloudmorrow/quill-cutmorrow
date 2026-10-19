@@ -1,0 +1,24 @@
+# A video being edited. The file stays where it is, in the person's drive;
+# the clip is what Vidmorrow knows about it and what was done to it.
+
+[datamodel]
+id = "vidmorrow.clip"
+version = 1
+label = "Clip"
+description = "A video being edited: the file it came from, what the renderer learned about it, and where its export went."
+scopes = ["personal"]
+title = "name"
+
+[fields]
+name = { kind = "string", required = true }
+source = { kind = "string", required = true, indexed = true, label = "Video", description = "The file it is cut from, in your drive" }
+status = { kind = "enum", values = ["new", "ready", "queued", "rendering", "done", "failed"], labels = ["New", "Ready", "Queued", "Rendering", "Exported", "Failed"], default = "new", indexed = true }
+message = { kind = "string", description = "What the renderer last said about it; empty when all is well" }
+width = { kind = "int", description = "In pixels, read from the file" }
+height = { kind = "int", description = "In pixels, read from the file" }
+duration = { kind = "decimal", description = "In seconds, read from the file" }
+fps = { kind = "decimal", label = "Frames per second" }
+wants_previews = { kind = "bool", default = false, indexed = true, description = "Whether a keyframe changed since its picture was last drawn" }
+output = { kind = "string", label = "Export", description = "The exported video, beside the original" }
+exported_at = { kind = "datetime", indexed = true, stamp = { field = "status", value = "done" } }
+notes = { kind = "markdown" }

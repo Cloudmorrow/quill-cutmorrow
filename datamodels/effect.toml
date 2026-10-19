@@ -1,0 +1,17 @@
+# One thing done to a clip: for now, a blur. Where it is at any moment is
+# said by its keyframes; between two of them it moves and grows in a
+# straight line.
+
+[datamodel]
+id = "vidmorrow.effect"
+version = 1
+label = "Effect"
+description = "A blur over part of a clip: what it hides, and how strongly. Its keyframes say where it is and when."
+scopes = ["personal"]
+title = "label"
+
+[fields]
+clip = { kind = "link", to = "vidmorrow.clip", required = true, indexed = true, on_delete = "cascade" }
+kind = { kind = "enum", values = ["blur"], labels = ["Blur"], default = "blur", indexed = true }
+label = { kind = "string", required = true, description = "What it hides: a face, a number plate, a screen" }
+strength = { kind = "int", default = 20, description = "How much it blurs, 1 to 100" }
