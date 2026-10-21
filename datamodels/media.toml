@@ -3,7 +3,7 @@
 # with its length. Written by the renderer only; a changed file is read again.
 
 [datamodel]
-id = "vidmorrow.media"
+id = "cutmorrow.media"
 version = 1
 label = "Media"
 description = "What a video or sound in My Files › Videos is: its length, picture size, frame rate, and whether it has sound."

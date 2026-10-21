@@ -1,20 +1,18 @@
-"""Vidmorrow: the code behind the Clips screen and the buttons.
+"""CutMorrow: the code behind the Video screen and the buttons.
 
 The editor itself is Cloudmorrow's timeline kit, declared in quill.toml:
 projects, the pieces on their tracks and the blurs on the pieces, with the
 kit's own field names. This is the rest, run in the sandbox as whoever
-presses it: the list of material in My Files › Videos, starting a project
-from one, and asking for an export. The video itself is never touched here:
+presses it: the list of every video in My Files, starting a project from
+one, and asking for an export. The video itself is never touched here:
 services/render.py, a program beside the server, draws the frames, fills in
 lengths and sizes, and renders the exports.
 """
 
-import contextlib
-
 from cloudmorrow.quill import action, error, go, redraw, toast, ui, view
 
-PROJECT, PIECE, MEDIA, FILE = "vidmorrow.project", "vidmorrow.piece", "vidmorrow.media", "file"
-DRIVE, FOLDER = "my-files", "Videos"
+PROJECT, PIECE, MEDIA, FILE = "cutmorrow.project", "cutmorrow.piece", "cutmorrow.media", "file"
+DRIVE, EXPORTS = "my-files", "CutMorrow Exports"
 TRACKS = [
     {"id": "V2", "kind": "video", "name": "Video 2"},
     {"id": "V1", "kind": "video", "name": "Video 1"},
@@ -24,14 +22,6 @@ TRACKS = [
 VIDEO_SUFFIXES = (".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mts", ".m2ts", ".3gp", ".mpg", ".mpeg", ".ogv")
 AUDIO_SUFFIXES = (".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".oga", ".opus", ".wma", ".aif", ".aiff")
 FORMATS = {"mp4": "MP4", "webm": "WebM", "mov": "MOV", "gif": "GIF", "m4a": "M4A"}
-STATUS_TONE = {"editing": "neutral", "queued": "info", "rendering": "warn", "done": "good", "failed": "bad"}
-STATUS_SAID = {
-    "editing": "Editing",
-    "queued": "Waiting to be exported",
-    "rendering": "Exporting",
-    "done": "Exported",
-    "failed": "The export failed",
-}
 
 
 # -- numbers and words ---------------------------------------------------------------------
@@ -71,13 +61,10 @@ def kind_of(record):
     return None
 
 
-def material(ctx):
-    """Every video and sound under My Files › Videos; None when the folder is not there."""
-    try:
-        files = ctx.records.list(FILE, share=DRIVE, within=FOLDER)
-    except Exception:  # noqa: BLE001 — no folder yet, or a drive the server cannot show
-        return None
-    found = [f for f in files if f.get("kind") == "file" and kind_of(f)]
+def videos(ctx):
+    """Every video in My Files, any folder, by folder and name."""
+    files = ctx.records.list(FILE, share=DRIVE, within="")
+    found = [f for f in files if f.get("kind") == "file" and kind_of(f) == "video"]
     return sorted(found, key=lambda f: (str(f.get("folder") or "").lower(), str(f.get("name") or "").lower()))
 
 
@@ -95,66 +82,38 @@ def length_of(lengths, file):
     return length if length and modified == str(file.get("modified") or "") else None
 
 
-def place(record):
-    """Where a file is under Videos: its subfolder, or nothing at the top."""
-    folder = str(record.get("folder") or "")
-    return folder[len(FOLDER) :].strip("/") if folder.startswith(FOLDER) else folder
-
-
-# -- the clips ------------------------------------------------------------------------------
-@view("clips")
-def clips(ctx):
-    found = material(ctx)
-    if found is None:
-        # The first look makes the folder, so there is somewhere to put them;
-        # it may have been made meanwhile, or be in a drive that cannot have it.
-        with contextlib.suppress(Exception):
-            ctx.records.create(FILE, share=DRIVE, folder="", name=FOLDER, kind="folder")
-        found = []
+# -- the videos -----------------------------------------------------------------------------
+@view("video")
+def video(ctx):
+    found = videos(ctx)
     lengths = known_lengths(ctx)
     rows = []
     for f in found:
         row = f.to_dict()
         row["fields"] = {
             **row["fields"],
-            "where": place(f) or "—",
-            "what": "Video" if kind_of(f) == "video" else "Sound",
+            "where": str(f.get("folder") or "") or "—",
             "bytes": bytes_said(f.get("size")),
             "length": clock(length_of(lengths, f)) if length_of(lengths, f) else "",
         }
         rows.append(row)
     parts = [
-        ui.text("Clips", style="title"),
-        ui.text("Everything in My Files › Videos, subfolders too. Exports land beside the originals.", style="muted"),
+        ui.text("Video", style="title"),
+        ui.text(f"Every video in My Files, in any folder. Exports land in {EXPORTS}.", style="muted"),
         ui.table(
             rows,
-            columns=[("Folder", "where"), "name", ("Kind", "what"), ("Size", "bytes"), ("Length", "length")],
+            columns=[("Folder", "where"), "name", ("Size", "bytes"), ("Length", "length")],
             open=False,
             actions=["edit-video"],
-            empty="No videos yet. Put videos (or sounds) in the Videos folder of My Files — from Files, the desktop "
-            "app's mount or WebDAV — and they are listed here.",
+            empty="No videos yet. Put videos anywhere in My Files — from Files, the desktop app's mount or "
+            "WebDAV — and they are listed here.",
         ),
+        ui.button("Refresh", action="refresh"),
     ]
-    projects = sorted(ctx.records.list(PROJECT), key=lambda p: p.updated_at, reverse=True)[:8]
-    if projects:
-        parts.append(ui.divider())
-        parts.append(ui.text("Recent projects", style="subtitle"))
-        for project in projects:
-            status = project.get("status") or "editing"
-            parts.append(
-                ui.row(
-                    ui.text(project["name"]),
-                    ui.badge(STATUS_SAID.get(status, status), tone=STATUS_TONE.get(status, "neutral")),
-                    project.get("output")
-                    and ui.button("Open the export", open={"id": project["output"], "model": FILE}),
-                    ui.button("Edit", go="editor", params={"project": project.id}),
-                )
-            )
-    parts.append(ui.button("Refresh", action="refresh"))
     if not ctx.user.admin:
         parts.append(
             ui.text(
-                "The renderer runs as the administrator who installed Vidmorrow, so for now it draws and "
+                "The renderer runs as the administrator who installed CutMorrow, so for now it draws and "
                 "exports their projects; yours wait until Quill services can run for everyone.",
                 style="small",
             )
@@ -208,7 +167,7 @@ def export(ctx, project, format="mp4", size="project", name=""):
             "export_name": (name or "").strip() or project["name"],
         },
     )
-    return toast("Queued: the export lands beside the first video in My Files › Videos")
+    return toast(f"Queued: the export lands in My Files › {EXPORTS}")
 
 
 @action("refresh")

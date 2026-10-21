@@ -1,4 +1,4 @@
-"""The arithmetic of Vidmorrow's renderer: a timeline to ffmpeg commands.
+"""The arithmetic of CutMorrow's renderer: a timeline to ffmpeg commands.
 
 Nothing here runs ffmpeg or talks to the server, so it is tested as plain
 functions. The words are the timeline kit's (docs/TIMELINE.md in the core):

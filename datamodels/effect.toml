@@ -3,7 +3,7 @@
 # in a straight line.
 
 [datamodel]
-id = "vidmorrow.effect"
+id = "cutmorrow.effect"
 version = 2
 label = "Effect"
 description = "A blur over part of a piece: what it hides, how strongly, and where its box is at moments of the piece."
@@ -11,7 +11,7 @@ scopes = ["personal"]
 title = "label"
 
 [fields]
-piece = { kind = "link", to = "vidmorrow.piece", required = true, indexed = true, on_delete = "cascade" }
+piece = { kind = "link", to = "cutmorrow.piece", required = true, indexed = true, on_delete = "cascade" }
 kind = { kind = "enum", values = ["blur"], labels = ["Blur"], default = "blur", indexed = true }
 label = { kind = "string", required = true, description = "What it hides: a face, a number plate, a screen" }
 strength = { kind = "int", default = 20, description = "How much it blurs, 1 to 100" }
