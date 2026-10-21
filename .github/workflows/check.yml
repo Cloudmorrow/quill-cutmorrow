@@ -21,6 +21,8 @@ jobs:
           repository: Cloudmorrow/datamodels
           path: .datamodels
       - uses: astral-sh/setup-uv@v5
+      # For the renderer's end-to-end test, which is skipped without it.
+      - run: sudo apt-get update -q && sudo apt-get install -y -q ffmpeg
       - run: uv sync
       - run: uv run cm quill check . --datamodels .datamodels
       - run: uv run cm quill test .

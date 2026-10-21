@@ -1,0 +1,22 @@
+# What the renderer read from a file in My Files › Videos with ffprobe, so
+# the Clips screen can say how long it is and a new project's piece starts
+# with its length. Written by the renderer only; a changed file is read again.
+
+[datamodel]
+id = "vidmorrow.media"
+version = 1
+label = "Media"
+description = "What a video or sound in My Files › Videos is: its length, picture size, frame rate, and whether it has sound."
+scopes = ["personal"]
+title = "name"
+
+[fields]
+source = { kind = "string", required = true, indexed = true, label = "File" }
+name = { kind = "string", required = true }
+modified = { kind = "string", description = "The file's modified time when it was read" }
+duration = { kind = "decimal", label = "Length (seconds)" }
+width = { kind = "int" }
+height = { kind = "int" }
+fps = { kind = "decimal", label = "Frames per second" }
+video = { kind = "bool", default = false, label = "Has a picture" }
+audio = { kind = "bool", default = false, label = "Has sound" }
