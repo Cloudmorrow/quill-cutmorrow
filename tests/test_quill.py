@@ -1,4 +1,4 @@
-"""Vidmorrow's tests: the real record store, files and gate, and quill.py, on this machine.
+"""CutMorrow's tests: the real record store, files and gate, and quill.py, on this machine.
 
 `cm quill test` runs them; `cm quill test --sandbox` runs the same tests
 with quill.py in the sandbox, as a server runs it. The renderer (a service)
@@ -11,10 +11,10 @@ import pytest
 from cloudmorrow.quill.testing import Harness
 
 PROJECT, PIECE, EFFECT, MEDIA, FILE = (
-    "vidmorrow.project",
-    "vidmorrow.piece",
-    "vidmorrow.effect",
-    "vidmorrow.media",
+    "cutmorrow.project",
+    "cutmorrow.piece",
+    "cutmorrow.effect",
+    "cutmorrow.media",
     "file",
 )
 
@@ -44,8 +44,9 @@ def test_the_timeline_screen_and_its_datamodels_check_out(q):
     manifest = tomllib.loads(Path("quill.toml").read_text())
     (editor,) = [s for s in manifest["screens"] if s.get("kit") == "timeline"]
     assert editor["pieces"] == PIECE and editor["effects"] == EFFECT and editor["frames"] == "frames"
-    assert editor["media"] == {"share": "my-files", "within": "Videos"} and editor["export"] == "export"
-    assert [s["id"] for s in manifest["screens"]] == ["clips", "editor"]
+    assert editor["media"] == {"share": "my-files", "within": ""} and editor["export"] == "export"
+    # The projects come first: CutMorrow opens on them, and `cm cutmorrow` has the timeline's words.
+    assert [(s["id"], s["label"]) for s in manifest["screens"]] == [("editor", "CutMorrow"), ("video", "Video")]
     assert manifest["apis"] == [{"id": "frames", "service": "render", "prefix": "frames"}]
     assert manifest["requires"]["runtimes"] == ["ffmpeg"]
     project = q.seed(PROJECT, name="Holiday")
@@ -57,24 +58,23 @@ def test_the_timeline_screen_and_its_datamodels_check_out(q):
     assert q.list(PIECE) == [] and q.list(EFFECT) == [], "a project takes its pieces and their effects with it"
 
 
-def test_with_nothing_in_videos_the_clips_say_where_to_put_them(q):
-    text = q.view("clips").text()
-    assert "Put videos" in text and "Videos folder of My Files" in text
-    assert [f["name"] for f in q.list(FILE, share="my-files", folder="") if f["name"] == "Videos"] == ["Videos"]
+def test_with_no_videos_the_list_says_where_to_put_them(q):
+    text = q.view("video").text()
+    assert "Put videos anywhere in My Files" in text and "CutMorrow Exports" in text
 
 
-def test_every_video_and_sound_under_videos_is_listed_subfolders_too(q):
+def test_every_video_in_my_files_is_listed_in_any_folder(q):
     a_file(q, "holiday.mp4")
     a_file(q, "song.mp3")
     a_file(q, "notes.txt")
     a_file(q, "beach.mov", folder="Videos/2026/Summer")
     a_file(q, "elsewhere.mp4", folder="Documents")
-    view = q.view("clips")
+    a_file(q, "top.webm", folder="")
+    view = q.view("video")
     (table,) = view.find("table")
     rows = {r["fields"]["name"]: r["fields"] for r in table["records"]}
-    assert set(rows) == {"holiday.mp4", "song.mp3", "beach.mov"}
-    assert rows["beach.mov"]["where"] == "2026/Summer" and rows["holiday.mp4"]["where"] == "—"
-    assert rows["song.mp3"]["what"] == "Sound" and rows["holiday.mp4"]["what"] == "Video"
+    assert set(rows) == {"holiday.mp4", "beach.mov", "elsewhere.mp4", "top.webm"}, "videos only, from everywhere"
+    assert rows["beach.mov"]["where"] == "Videos/2026/Summer" and rows["top.webm"]["where"] == "—"
     assert rows["holiday.mp4"]["bytes"] == "12 bytes" and rows["holiday.mp4"]["length"] == ""
     assert table["actions"] == ["edit-video"]
 
@@ -96,18 +96,17 @@ def test_edit_this_video_starts_a_project_with_the_whole_video_on_v1(q):
 
     # Once the renderer has read the file, the list says how long it is and the next project starts with it.
     q.seed(MEDIA, source=video.id, name="holiday.mp4", modified=video["modified"], duration=12.5, video=True)
-    (table,) = q.view("clips").find("table")
+    (table,) = q.view("video").find("table")
     assert table["records"][0]["fields"]["length"] == "0:12.5"
     assert q.act("edit-video", video, name="Second cut").ok
     second = next(p for p in q.list(PROJECT) if p["name"] == "Second cut")
     (again,) = q.list(PIECE, project=second.id)
     assert float(again["length"]) == 12.5
-    assert "Second cut" in q.view("clips").text()
     # A file changed since it was read is not known any more.
     q.seed(MEDIA, source="f_other", name="x.mp4", modified="long ago", duration=3)
     stale = a_file(q, "stale.mp4")
     q.seed(MEDIA, source=stale.id, name="stale.mp4", modified="long ago", duration=3)
-    (table,) = q.view("clips").find("table")
+    (table,) = q.view("video").find("table")
     assert next(r for r in table["records"] if r["fields"]["name"] == "stale.mp4")["fields"]["length"] == ""
 
 
@@ -151,7 +150,7 @@ def test_a_sound_only_export_of_muted_pieces_is_refused(q):
 def test_somebody_else_sees_only_their_own_projects(q):
     project = q.seed(PROJECT, name="Mine")
     sam = q.as_user("sam")
-    assert "Mine" not in sam.view("clips").text()
+    assert sam.list(PROJECT) == []
     assert sam.act("export", project).refused
 
 

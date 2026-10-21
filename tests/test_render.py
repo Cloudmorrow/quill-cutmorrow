@@ -162,11 +162,11 @@ def test_filling_in_gives_pieces_their_length_and_the_project_its_picture(timeli
     f = store.record(PROJECT, project["id"])["fields"]
     assert (f["width"], f["height"], f["fps"]) == (320, 180, 25.0)
     known = {m["fields"]["name"]: m["fields"] for m in store.records(render.MEDIA)}
-    assert known["a.mp4"]["duration"] == 3.0 and known["a.mp4"]["audio"] is True, "remembered for the Clips screen"
+    assert known["a.mp4"]["duration"] == 3.0 and known["a.mp4"]["audio"] is True, "remembered for the Video screen"
     assert known["b.mp4"]["video"] is True and abs(known["b.mp4"]["duration"] - 2.0) < 0.1
 
 
-def test_the_export_is_one_file_beside_the_first_video_cut_cropped_and_blurred(timeline, tmp_path):
+def test_the_export_is_one_file_in_the_exports_folder_cut_cropped_and_blurred(timeline, tmp_path):
     store, renderer, project, _ = timeline
     store.patch(
         PROJECT, project["id"], {"status": "queued", "format": "mp4", "size": "project", "export_name": "Holiday cut"}
@@ -174,7 +174,10 @@ def test_the_export_is_one_file_beside_the_first_video_cut_cropped_and_blurred(t
     done = renderer.render(store.record(PROJECT, project["id"]))["fields"]
     assert done["status"] == "done", done["message"]
     out = store.record(FILE, done["output"])
-    assert out["fields"]["folder"] == "Videos" and out["fields"]["name"] == "Holiday cut.mp4"
+    assert out["fields"]["folder"] == "CutMorrow Exports" and out["fields"]["name"] == "Holiday cut.mp4"
+    # The folder is made the first time, at the top of My Files, and only once.
+    folders = [f for f in store.records(FILE, kind="folder") if f["fields"]["name"] == "CutMorrow Exports"]
+    assert len(folders) == 1 and folders[0]["fields"]["folder"] == ""
     path = store.path_of(out)
     info = probe(path)
     streams = {s["codec_type"]: s for s in info["streams"]}

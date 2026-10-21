@@ -2,7 +2,7 @@
 # folder, not a package. `uv sync` makes .venv with Cloudmorrow's server (for
 # the tests' harness) and pytest; `cm quill test` uses it.
 [project]
-name = "quill-vidmorrow"
+name = "quill-cutmorrow"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = []

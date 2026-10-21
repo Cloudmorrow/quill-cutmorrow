@@ -3,7 +3,7 @@
 # kit's (docs/TIMELINE.md in the core), so every surface draws it.
 
 [datamodel]
-id = "vidmorrow.project"
+id = "cutmorrow.project"
 version = 1
 label = "Project"
 description = "A video being edited: pieces of the videos and sounds in My Files › Videos on tracks, a crop, and its export."

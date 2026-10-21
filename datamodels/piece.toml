@@ -2,7 +2,7 @@
 # in the file, for how long, and where on the timeline.
 
 [datamodel]
-id = "vidmorrow.piece"
+id = "cutmorrow.piece"
 version = 1
 label = "Piece"
 description = "Part of a video or a sound on a project's track: where it starts, where in the file it is cut from, how long it lasts."
@@ -10,7 +10,7 @@ scopes = ["personal"]
 title = "name"
 
 [fields]
-project = { kind = "link", to = "vidmorrow.project", required = true, indexed = true, on_delete = "cascade" }
+project = { kind = "link", to = "cutmorrow.project", required = true, indexed = true, on_delete = "cascade" }
 track = { kind = "string", required = true, description = "A track id of the project: V1, A1…" }
 source = { kind = "string", required = true, indexed = true, label = "File", description = "The file it is cut from, in My Files › Videos" }
 name = { kind = "string", required = true }

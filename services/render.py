@@ -1,10 +1,10 @@
-"""Vidmorrow's renderer: a program beside the server, with ffmpeg.
+"""CutMorrow's renderer: a program beside the server, with ffmpeg.
 
 The core starts it with the Quill and keeps it running. It does three things,
-through the record API as the administrator who installed Vidmorrow:
+through the record API as the administrator who installed CutMorrow:
 
 - **the frames API** (`[[apis]] id = "frames"`): an HTTP server on `$PORT`,
-  which the core forwards `/api/q/vidmorrow/frames/…` to. `info` is what
+  which the core forwards `/api/q/cutmorrow/frames/…` to. `info` is what
   ffprobe says about a file, `source` a frame of one, `frame` a frame of a
   project's cut — the top video track's piece fitted, its blurs drawn, the
   crop applied. Each answers in well under the core's 30 seconds once the
@@ -12,9 +12,9 @@ through the record API as the administrator who installed Vidmorrow:
 - **filling in**: a piece with no length gets its source's (from its
   offset on); a project with no size or frame rate gets its first video's;
 - **exports**: a project whose status is *queued* is rendered with one
-  ffmpeg filter graph (graph.py) and the result is put in My Files beside
-  the first piece's source; the project says *done* and points at it, or
-  *failed* and why.
+  ffmpeg filter graph (graph.py) and the result is put in My Files ›
+  CutMorrow Exports, made the first time; the project says *done* and
+  points at it, or *failed* and why.
 
 Only the standard library is used, and ffmpeg and ffprobe on the service's
 PATH, where the server put them: the manifest requires the `ffmpeg` runtime.
@@ -43,15 +43,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import graph
 
 PROJECT, PIECE, EFFECT, MEDIA, FILE = (
-    "vidmorrow.project",
-    "vidmorrow.piece",
-    "vidmorrow.effect",
-    "vidmorrow.media",
+    "cutmorrow.project",
+    "cutmorrow.piece",
+    "cutmorrow.effect",
+    "cutmorrow.media",
     "file",
 )
+# Every export lands here, in the drive of whoever the renderer runs as.
+EXPORTS = ("my-files", "CutMorrow Exports")
 EVERY = 3.0
 FRAME_TIMEOUT = 25.0
-NO_FFMPEG = "ffmpeg is missing on the server; install Vidmorrow again and it comes with it"
+NO_FFMPEG = "ffmpeg is missing on the server; install CutMorrow again and it comes with it"
 
 
 def log(*parts) -> None:
@@ -364,8 +366,8 @@ class Renderer:
             pieces = self.pieces(project)
             if not pieces:
                 raise ValueError("there is nothing on the tracks")
-            first = min(pieces, key=lambda p: (p["start"], p["track"]))["file"]["fields"]
-            share, folder = str(first.get("share") or "my-files"), str(first.get("folder") or "")
+            share, folder = EXPORTS
+            ensure_folder(self.store, share, folder)
             name = unique_name(
                 self.store, share, folder, export_stem(fields.get("export_name") or fields.get("name")), fmt
             )
@@ -387,6 +389,20 @@ class Renderer:
         said = f"Exported {name} to {where} in {time.time() - started:.0f} s"
         log(said)
         return self.store.patch(PROJECT, project["id"], {"status": "done", "message": said, "output": made["id"]})
+
+
+def ensure_folder(store, share: str, folder: str) -> None:
+    """The exports' folder, made the first time there is something to put in it."""
+    try:
+        if any(
+            f["fields"].get("kind") == "folder" and f["fields"].get("name") == folder
+            for f in store.records(FILE, share=share, folder="")
+        ):
+            return
+        store.create(FILE, {"share": share, "folder": "", "name": folder, "kind": "folder"})
+    except ApiError as exc:
+        # Made meanwhile is as good; anything else, the upload says.
+        log("the exports folder:", exc)
 
 
 def export_stem(name) -> str:
@@ -414,7 +430,7 @@ def serve(renderer: Renderer, port: int, host: str = "127.0.0.1") -> ThreadingHT
     """The frames API on *port*, in a thread of its own; the server, to shut down."""
 
     class Frames(BaseHTTPRequestHandler):
-        server_version = "vidmorrow-frames"
+        server_version = "cutmorrow-frames"
 
         def log_message(self, fmt, *args) -> None:  # quiet: the core logs requests
             pass
