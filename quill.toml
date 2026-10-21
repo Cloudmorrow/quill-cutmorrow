@@ -1,140 +1,101 @@
-# Vidmorrow: a video editor for one job, done well. Put a video in the
-# Vidmorrow folder of your drive, draw a blur over what should not be seen,
-# say where it is at a few moments, and export. The screens are drawn by
-# Cloudmorrow on every surface; the video work is a service beside the
-# server, with ffmpeg, which the install brings. See CLAUDE.md for the
-# format and the loop.
+# Vidmorrow: a video editor. The videos and sounds in My Files › Videos are
+# its material; a project lays pieces of them on video and audio tracks, cut,
+# trimmed and moved, with blurs that follow keyframes and a crop, and exports
+# a new file beside the originals. The editor is Cloudmorrow's timeline kit,
+# drawn on every surface; the pictures and the export come from a service
+# beside the server, with ffmpeg, which the install brings. See CLAUDE.md for
+# the format and the loop.
 
 [quill]
 id = "vidmorrow"
 name = "Vidmorrow"
-version = "1.0.0"
-summary = "Blur faces, plates and screens in a video: a box that moves and grows between keyframes, then export."
+version = "2.0.0"
+summary = "A video editor for the videos in your drive: cut, trim and arrange clips on video and audio tracks, blur what should not be seen, crop, and export."
 category = "personal"
 icon = "play"
 publisher = "Cloudmorrow"
 license = "AGPL-3.0-or-later"
 code = "quill.py"
 features = [
-  "Videos from the Vidmorrow folder of your drive, in one list; every export lands beside its original",
-  "A blur over a face, a number plate or a screen: a box in percent of the frame, so it reads the same on a phone and in 4K",
-  "Keyframes: say where the box is at a few moments, and it moves and resizes in a straight line between them",
-  "As many blurs on one clip as it needs, each with its own keyframes and strength",
-  "A picture of every keyframe with its box drawn on it, so you see what you are hiding before you render",
-  "Export with ffmpeg, beside the server: the sound is kept, the picture is H.264 that plays anywhere",
+  "Every video and sound in My Files › Videos, subfolders too, is material: one press starts a project from it",
+  "A real timeline: video and audio tracks, pieces cut, trimmed, split, moved and rearranged; a higher video track covers a lower one",
+  "Sound from every piece, mixed: mute one, or set its volume",
+  "Blur a face, a number plate or a screen with keyframes: the box moves and resizes in a straight line between them, and moves with its piece",
+  "Crop the whole picture",
+  "Export to MP4, WebM, MOV, GIF or sound-only M4A, as the project or at 1080p, 720p or 480p; the file lands beside the originals",
+  "The same editor on the web and the phone (live, with sound), in the terminal (real frames) and on the command line",
 ]
 
-# A clip is cut from a file in the person's drive, and its export and the
-# keyframe pictures are files there too.
+# The material and the exports are files in the person's drive.
 [uses]
 datamodels = ["file"]
 
 # -- screens -------------------------------------------------------------------------
-# The videos in the Vidmorrow folder, and the clips cut from them.
+# Every video and sound in My Files › Videos, with a button to start editing.
 [[screens]]
 id = "clips"
 label = "Clips"
 view = "clips"
-model = "vidmorrow.clip"
+model = "vidmorrow.project"
 
-# One clip: its blurs, each with its keyframes and their pictures, and export.
+# The editor: Cloudmorrow's timeline kit (docs/TIMELINE.md in the core).
 [[screens]]
-id = "clip"
+id = "editor"
+kit = "timeline"
 label = "Editor"
-view = "clip"
-model = "vidmorrow.clip"
-
-# -- datasets ------------------------------------------------------------------------
-# The Vidmorrow folder in My Files, the first time somebody opens Vidmorrow,
-# with a note in it on how it works: the videos to edit go beside the note.
-[[datasets]]
-id = "welcome"
-model = "file"
-seed = "per-owner"
-where = { share = "my-files", within = "Vidmorrow", suffix = ".md" }
-file = "datasets/welcome.toml"
+model = "vidmorrow.project"
+title = "name"
+pieces = "vidmorrow.piece"
+effects = "vidmorrow.effect"
+media = { share = "my-files", within = "Videos" }
+frames = "frames"
+export = "export"
 
 # -- actions -------------------------------------------------------------------------
-# A video becomes a clip to edit.
+# A video (or a sound) becomes a project with it on the first track.
 [[actions]]
-id = "new-clip"
+id = "edit-video"
 label = "Edit this video"
 on = "file"
 tone = "primary"
-description = "Starts editing this video: a clip with no effects yet."
+description = "Starts a project from this video or sound: all of it, on the first track of its kind."
 [actions.fields]
-name = { kind = "string", description = "What to call the clip; the file's name when left out" }
+name = { kind = "string", description = "What to call the project; the file's name when left out" }
 
-# A blur, with its first keyframe: where the box is, from when.
-[[actions]]
-id = "add-blur"
-label = "Add a blur"
-on = "vidmorrow.clip"
-tone = "primary"
-description = "A blur over part of this clip, from one moment on. The box is in percent of the frame."
-[actions.fields]
-label = { kind = "string", required = true, default = "Blur", description = "What it hides: a face, a number plate, a screen" }
-at = { kind = "decimal", required = true, default = 0, label = "At (seconds)" }
-x = { kind = "decimal", required = true, default = 35, label = "Left (%)" }
-y = { kind = "decimal", required = true, default = 25, label = "Top (%)" }
-w = { kind = "decimal", required = true, default = 30, label = "Width (%)" }
-h = { kind = "decimal", required = true, default = 40, label = "Height (%)" }
-strength = { kind = "int", default = 20, description = "How much it blurs, 1 to 100" }
-
-# Another moment for a blur: where its box is then. Between two keyframes it
-# moves and resizes in a straight line.
-[[actions]]
-id = "add-keyframe"
-label = "Add a keyframe"
-on = "vidmorrow.effect"
-description = "Where this blur's box is at another moment of the clip."
-[actions.fields]
-at = { kind = "decimal", required = true, label = "At (seconds)" }
-x = { kind = "decimal", required = true, label = "Left (%)" }
-y = { kind = "decimal", required = true, label = "Top (%)" }
-w = { kind = "decimal", required = true, label = "Width (%)" }
-h = { kind = "decimal", required = true, label = "Height (%)" }
-
-[[actions]]
-id = "remove-effect"
-label = "Remove"
-on = "vidmorrow.effect"
-confirm = "Remove this blur and all its keyframes?"
-tone = "danger"
-
-# The clip is rendered, beside the server, and the result lands beside the
-# original in the drive.
+# The export: rendered beside the server, and put beside the first piece's
+# video in My Files. The project says how it goes.
 [[actions]]
 id = "export"
 label = "Export"
-on = "vidmorrow.clip"
+on = "vidmorrow.project"
 tone = "primary"
-description = "Renders the clip with its blurs to a new video beside the original."
+description = "Renders the project to a new file beside its first video in My Files › Videos."
+[actions.fields]
+format = { kind = "enum", values = ["mp4", "webm", "mov", "gif", "m4a"], labels = ["MP4 (H.264, AAC)", "WebM (VP9, Opus)", "MOV (H.264)", "GIF (no sound)", "M4A (sound only)"], default = "mp4", required = true }
+size = { kind = "enum", values = ["project", "1080p", "720p", "480p"], labels = ["As the project", "1080p", "720p", "480p"], default = "project", required = true }
+name = { kind = "string", description = "What to call the file; the project's name when left out" }
 
-# Draw the screen again: the renderer works beside the server, and a clip
-# changes status while you look at it.
+# Draw the screen again: the renderer works beside the server.
 [[actions]]
 id = "refresh"
 label = "Refresh"
 assistant = false
 
-# -- hooks ---------------------------------------------------------------------------
-# A keyframe that changed wants a new picture; one that is gone takes its
-# picture with it.
-[[hooks]]
-on = "vidmorrow.keyframe"
-when = ["created", "changed", "deleted"]
-handler = "keyframe_changed"
-
 # -- the renderer ----------------------------------------------------------------------
-# A program beside the server, with ffmpeg: it reads the size and length of
-# new clips, draws a picture of each keyframe with its box on it, and renders
-# the exports people ask for. It works through the record API, as the
-# administrator who installed Vidmorrow.
+# A program beside the server, with ffmpeg: it answers the frames API the
+# editor draws its viewer from, fills in the lengths and sizes the kit
+# leaves blank, and renders the exports people ask for. It works through the
+# record API, as the administrator who installed Vidmorrow.
 [[services]]
 id = "render"
 command = ["python", "services/render.py"]
 always = true
+
+# The frames API: /api/q/vidmorrow/frames/info, /source and /frame.
+[[apis]]
+id = "frames"
+service = "render"
+prefix = "frames"
 
 # ffmpeg and ffprobe come with the install: the server fetches the catalog's
 # static build for its own machine, checks it, and puts it first on the

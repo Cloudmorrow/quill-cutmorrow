@@ -1,0 +1,26 @@
+# One edit: the pieces laid on its tracks, the crop of the whole picture,
+# and how and where it was last exported. The field names are the timeline
+# kit's (docs/TIMELINE.md in the core), so every surface draws it.
+
+[datamodel]
+id = "vidmorrow.project"
+version = 1
+label = "Project"
+description = "A video being edited: pieces of the videos and sounds in My Files › Videos on tracks, a crop, and its export."
+scopes = ["personal"]
+title = "name"
+
+[fields]
+name = { kind = "string", required = true }
+width = { kind = "int", description = "The picture's width in pixels; the first video's when blank" }
+height = { kind = "int", description = "The picture's height in pixels; the first video's when blank" }
+fps = { kind = "decimal", label = "Frames per second" }
+tracks = { kind = "json", description = "The tracks, top to bottom; blank is Video 2, Video 1, Audio 1, Audio 2" }
+crop = { kind = "json", description = "The part of the picture kept, in percent: {x, y, w, h}; blank keeps all of it" }
+status = { kind = "enum", values = ["editing", "queued", "rendering", "done", "failed"], labels = ["Editing", "Queued", "Rendering", "Exported", "Failed"], default = "editing", indexed = true }
+message = { kind = "string", description = "What the renderer last said about it" }
+output = { kind = "string", label = "Export", description = "The last export: a file beside the first piece's video" }
+format = { kind = "enum", values = ["mp4", "webm", "mov", "gif", "m4a"], labels = ["MP4 (H.264, AAC)", "WebM (VP9, Opus)", "MOV (H.264)", "GIF (no sound)", "M4A (sound only)"], default = "mp4", description = "What the export is" }
+size = { kind = "enum", values = ["project", "1080p", "720p", "480p"], labels = ["As the project", "1080p", "720p", "480p"], default = "project", description = "The export's picture: the project's (cropped), or its shorter side made 1080, 720 or 480" }
+export_name = { kind = "string", label = "Export name", description = "What the export is called; the project's name when blank" }
+exported_at = { kind = "datetime", indexed = true, stamp = { field = "status", value = "done" } }

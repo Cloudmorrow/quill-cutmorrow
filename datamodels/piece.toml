@@ -1,0 +1,21 @@
+# A piece of a video or a sound, laid on one track of a project: from where
+# in the file, for how long, and where on the timeline.
+
+[datamodel]
+id = "vidmorrow.piece"
+version = 1
+label = "Piece"
+description = "Part of a video or a sound on a project's track: where it starts, where in the file it is cut from, how long it lasts."
+scopes = ["personal"]
+title = "name"
+
+[fields]
+project = { kind = "link", to = "vidmorrow.project", required = true, indexed = true, on_delete = "cascade" }
+track = { kind = "string", required = true, description = "A track id of the project: V1, A1…" }
+source = { kind = "string", required = true, indexed = true, label = "File", description = "The file it is cut from, in My Files › Videos" }
+name = { kind = "string", required = true }
+start = { kind = "decimal", required = true, default = 0, description = "Where it begins on the timeline, in seconds" }
+offset = { kind = "decimal", default = 0, description = "Where in the file it begins, in seconds" }
+length = { kind = "decimal", description = "How long it lasts, in seconds; the renderer fills it in when blank" }
+volume = { kind = "decimal", default = 1, description = "0 to 2; 1 is as recorded" }
+muted = { kind = "bool", default = false }
