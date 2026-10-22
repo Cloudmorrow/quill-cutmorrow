@@ -18,9 +18,8 @@ server, with an ffmpeg the install brings. Nothing leaves it.
    playhead; move pieces along the timeline and between tracks, trim either
    end, split at the playhead, mute a piece or set its volume. A higher
    video track covers a lower one; every piece's sound is mixed. Or start
-   from the **Video** screen, which lists every video in My Files, in any
-   folder: **Edit this video** makes a project with all of it on the first
-   track.
+   from a video in **Media** (or Files): **Edit this video** on it makes a
+   project with all of it on the first track.
 3. **Add blur** on a piece and drag its box over a face, a number plate or a
    screen. Every change sets a keyframe at the playhead; between keyframes
    the box moves and resizes in a straight line. Blurs belong to their piece,
@@ -36,11 +35,17 @@ server, with an ffmpeg the install brings. Nothing leaves it.
 | | |
 | --- | --- |
 | Datamodels | uses the foundational `file`; introduces `cutmorrow.project` (a timeline: its picture size, frame rate, tracks, crop, export settings and the status of its export), `cutmorrow.piece` (part of a file on a track: where it starts, where in the file it is cut from, how long, its volume), `cutmorrow.effect` (a blur on a piece and its keyframes) and `cutmorrow.media` (what the renderer read from a file: its length, size and whether it has sound) |
-| Screens | CutMorrow (the projects and the editor: the timeline kit) and Video (a view: every video in My Files) — on the phone, the web app, the terminal, `cm cutmorrow`, and to your assistant |
-| Actions | Edit this video, Export (format, size, name), Refresh |
+| Screens | CutMorrow (the projects and the editor: the timeline kit) — on the phone, the web app, the terminal, `cm cutmorrow`, and to your assistant |
+| Actions | Edit this video (on a video's sheet, in Media or Files), Export (format, size, name), Refresh |
+| Quills | requires [Media](https://github.com/Cloudmorrow/quill-media), which shows the videos and photos in your drive and is installed with CutMorrow |
 | Services, APIs | `render`: a program beside the server (`services/render.py`), kept running, with ffmpeg. It serves the `frames` API the editor's viewer draws from (`/api/q/cutmorrow/frames/info`, `/source`, `/frame`), fills in the lengths and sizes the editor leaves blank, and renders the exports, through the record API |
 
 ## What it needs
+
+**Media**, which comes with the install: the manifest requires the `media`
+Quill (`[requires] quills`), so installing CutMorrow installs Media first,
+from the catalog, and Media cannot be removed while CutMorrow is here.
+Media works without CutMorrow.
 
 **ffmpeg**, which comes with the install: the manifest requires the `ffmpeg`
 runtime, so the install sheet says what it adds to the server, and the
