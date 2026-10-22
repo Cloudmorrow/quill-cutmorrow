@@ -9,7 +9,7 @@
 [quill]
 id = "cutmorrow"
 name = "CutMorrow"
-version = "3.0.0"
+version = "3.1.0"
 summary = "A video editor for the videos in your drive: cut, trim and arrange clips on video and audio tracks, blur what should not be seen, crop, and export."
 category = "personal"
 icon = "play"
@@ -17,7 +17,7 @@ publisher = "Cloudmorrow"
 license = "AGPL-3.0-or-later"
 code = "quill.py"
 features = [
-  "Every video and sound in My Files is material: one press on a video starts a project from it",
+  "Every video and sound in My Files is material: Edit this video, on a video in Media or Files, starts a project from it",
   "A real timeline: video and audio tracks, pieces cut, trimmed, split, moved and rearranged; a higher video track covers a lower one",
   "Sound from every piece, mixed: mute one, or set its volume",
   "Blur a face, a number plate or a screen with keyframes: the box moves and resizes in a straight line between them, and moves with its piece",
@@ -34,7 +34,8 @@ datamodels = ["file"]
 # -- screens -------------------------------------------------------------------------
 # The projects, and each one in the editor: Cloudmorrow's timeline kit
 # (docs/TIMELINE.md in the core). The material is every video and sound in
-# My Files.
+# My Files. Looking through the videos is Media's: CutMorrow requires it,
+# and adds Edit this video to a video there.
 [[screens]]
 id = "editor"
 kit = "timeline"
@@ -47,15 +48,9 @@ media = { share = "my-files", within = "" }   # the whole drive, every folder
 frames = "frames"
 export = "export"
 
-# Every video in My Files, with a button to start editing one.
-[[screens]]
-id = "video"
-label = "Video"
-view = "video"
-model = "cutmorrow.project"
-
 # -- actions -------------------------------------------------------------------------
-# A video (or a sound) becomes a project with it on the first track.
+# A video (or a sound) becomes a project with it on the first track: a
+# button on every file's sheet, so on a video opened in Media or Files.
 [[actions]]
 id = "edit-video"
 label = "Edit this video"
@@ -105,3 +100,6 @@ prefix = "frames"
 # renderer's PATH. Nobody installs anything on the server by hand.
 [requires]
 runtimes = ["ffmpeg"]
+# Media shows the videos (and the photos) in the drive; CutMorrow edits them.
+# Installing CutMorrow installs Media first; Media needs nothing of CutMorrow.
+quills = ["media"]

@@ -46,7 +46,9 @@ def test_the_timeline_screen_and_its_datamodels_check_out(q):
     assert editor["pieces"] == PIECE and editor["effects"] == EFFECT and editor["frames"] == "frames"
     assert editor["media"] == {"share": "my-files", "within": ""} and editor["export"] == "export"
     # The projects come first: CutMorrow opens on them, and `cm cutmorrow` has the timeline's words.
-    assert [(s["id"], s["label"]) for s in manifest["screens"]] == [("editor", "CutMorrow"), ("video", "Video")]
+    # Looking through the videos is Media's, which CutMorrow brings with it.
+    assert [(s["id"], s["label"]) for s in manifest["screens"]] == [("editor", "CutMorrow")]
+    assert manifest["requires"]["quills"] == ["media"]
     assert manifest["apis"] == [{"id": "frames", "service": "render", "prefix": "frames"}]
     assert manifest["requires"]["runtimes"] == ["ffmpeg"]
     project = q.seed(PROJECT, name="Holiday")
@@ -56,27 +58,6 @@ def test_the_timeline_screen_and_its_datamodels_check_out(q):
     assert effect["kind"] == "blur" and effect["keyframes"][0]["w"] == 3
     q.delete(PROJECT, project.id)
     assert q.list(PIECE) == [] and q.list(EFFECT) == [], "a project takes its pieces and their effects with it"
-
-
-def test_with_no_videos_the_list_says_where_to_put_them(q):
-    text = q.view("video").text()
-    assert "Put videos anywhere in My Files" in text and "CutMorrow Exports" in text
-
-
-def test_every_video_in_my_files_is_listed_in_any_folder(q):
-    a_file(q, "holiday.mp4")
-    a_file(q, "song.mp3")
-    a_file(q, "notes.txt")
-    a_file(q, "beach.mov", folder="Videos/2026/Summer")
-    a_file(q, "elsewhere.mp4", folder="Documents")
-    a_file(q, "top.webm", folder="")
-    view = q.view("video")
-    (table,) = view.find("table")
-    rows = {r["fields"]["name"]: r["fields"] for r in table["records"]}
-    assert set(rows) == {"holiday.mp4", "beach.mov", "elsewhere.mp4", "top.webm"}, "videos only, from everywhere"
-    assert rows["beach.mov"]["where"] == "Videos/2026/Summer" and rows["top.webm"]["where"] == "—"
-    assert rows["holiday.mp4"]["bytes"] == "12 bytes" and rows["holiday.mp4"]["length"] == ""
-    assert table["actions"] == ["edit-video"]
 
 
 def test_edit_this_video_starts_a_project_with_the_whole_video_on_v1(q):
@@ -94,20 +75,19 @@ def test_edit_this_video_starts_a_project_with_the_whole_video_on_v1(q):
     assert float(piece["start"]) == 0 and float(piece["offset"]) == 0
     assert piece.get("length") in (None, ""), "the renderer fills it in from the file"
 
-    # Once the renderer has read the file, the list says how long it is and the next project starts with it.
+    # Once the renderer has read the file, the next project starts with its length.
     q.seed(MEDIA, source=video.id, name="holiday.mp4", modified=video["modified"], duration=12.5, video=True)
-    (table,) = q.view("video").find("table")
-    assert table["records"][0]["fields"]["length"] == "0:12.5"
     assert q.act("edit-video", video, name="Second cut").ok
     second = next(p for p in q.list(PROJECT) if p["name"] == "Second cut")
     (again,) = q.list(PIECE, project=second.id)
     assert float(again["length"]) == 12.5
     # A file changed since it was read is not known any more.
-    q.seed(MEDIA, source="f_other", name="x.mp4", modified="long ago", duration=3)
     stale = a_file(q, "stale.mp4")
     q.seed(MEDIA, source=stale.id, name="stale.mp4", modified="long ago", duration=3)
-    (table,) = q.view("video").find("table")
-    assert next(r for r in table["records"] if r["fields"]["name"] == "stale.mp4")["fields"]["length"] == ""
+    assert q.act("edit-video", stale, name="Stale").ok
+    third = next(p for p in q.list(PROJECT) if p["name"] == "Stale")
+    (piece,) = q.list(PIECE, project=third.id)
+    assert piece.get("length") in (None, "")
 
 
 def test_a_sound_goes_on_the_first_audio_track_and_other_files_are_refused(q):

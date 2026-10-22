@@ -1,18 +1,18 @@
-"""CutMorrow: the code behind the Video screen and the buttons.
+"""CutMorrow: the code behind the buttons.
 
 The editor itself is Cloudmorrow's timeline kit, declared in quill.toml:
 projects, the pieces on their tracks and the blurs on the pieces, with the
 kit's own field names. This is the rest, run in the sandbox as whoever
-presses it: the list of every video in My Files, starting a project from
-one, and asking for an export. The video itself is never touched here:
+presses it: starting a project from a video (a button on its sheet, in
+Media or Files), and asking for an export. The video itself is never touched here:
 services/render.py, a program beside the server, draws the frames, fills in
 lengths and sizes, and renders the exports.
 """
 
-from cloudmorrow.quill import action, error, go, redraw, toast, ui, view
+from cloudmorrow.quill import action, error, go, redraw, toast
 
 PROJECT, PIECE, MEDIA, FILE = "cutmorrow.project", "cutmorrow.piece", "cutmorrow.media", "file"
-DRIVE, EXPORTS = "my-files", "CutMorrow Exports"
+EXPORTS = "CutMorrow Exports"
 TRACKS = [
     {"id": "V2", "kind": "video", "name": "Video 2"},
     {"id": "V1", "kind": "video", "name": "Video 1"},
@@ -33,23 +33,6 @@ def number(value, fallback=0.0):
         return fallback
 
 
-def clock(seconds):
-    """Seconds as 1:03.5 — minutes, seconds and tenths, only what is needed."""
-    seconds = max(0.0, number(seconds))
-    minutes, rest = divmod(round(seconds, 1), 60)
-    said = f"{rest:04.1f}" if rest != int(rest) else f"{int(rest):02d}"
-    return f"{int(minutes)}:{said}"
-
-
-def bytes_said(size):
-    size = number(size)
-    for unit in ("bytes", "KB", "MB", "GB"):
-        if size < 1000 or unit == "GB":
-            return f"{size:.0f} {unit}" if unit == "bytes" else f"{size:.1f} {unit}"
-        size /= 1000
-    return ""
-
-
 def kind_of(record):
     """'video', 'audio', or None for a file that is neither."""
     name = str(record.get("name") or "").lower()
@@ -59,13 +42,6 @@ def kind_of(record):
     if mime.startswith("audio/") or name.endswith(AUDIO_SUFFIXES):
         return "audio"
     return None
-
-
-def videos(ctx):
-    """Every video in My Files, any folder, by folder and name."""
-    files = ctx.records.list(FILE, share=DRIVE, within="")
-    found = [f for f in files if f.get("kind") == "file" and kind_of(f) == "video"]
-    return sorted(found, key=lambda f: (str(f.get("folder") or "").lower(), str(f.get("name") or "").lower()))
 
 
 def known_lengths(ctx):
@@ -82,45 +58,7 @@ def length_of(lengths, file):
     return length if length and modified == str(file.get("modified") or "") else None
 
 
-# -- the videos -----------------------------------------------------------------------------
-@view("video")
-def video(ctx):
-    found = videos(ctx)
-    lengths = known_lengths(ctx)
-    rows = []
-    for f in found:
-        row = f.to_dict()
-        row["fields"] = {
-            **row["fields"],
-            "where": str(f.get("folder") or "") or "—",
-            "bytes": bytes_said(f.get("size")),
-            "length": clock(length_of(lengths, f)) if length_of(lengths, f) else "",
-        }
-        rows.append(row)
-    parts = [
-        ui.text("Video", style="title"),
-        ui.text(f"Every video in My Files, in any folder. Exports land in {EXPORTS}.", style="muted"),
-        ui.table(
-            rows,
-            columns=[("Folder", "where"), "name", ("Size", "bytes"), ("Length", "length")],
-            open=False,
-            actions=["edit-video"],
-            empty="No videos yet. Put videos anywhere in My Files — from Files, the desktop app's mount or "
-            "WebDAV — and they are listed here.",
-        ),
-        ui.button("Refresh", action="refresh"),
-    ]
-    if not ctx.user.admin:
-        parts.append(
-            ui.text(
-                "The renderer runs as the administrator who installed CutMorrow, so for now it draws and "
-                "exports their projects; yours wait until Quill services can run for everyone.",
-                style="small",
-            )
-        )
-    return ui.stack(*parts)
-
-
+# -- buttons --------------------------------------------------------------------------------
 @action("edit_video")
 def edit_video(ctx, video, name=""):
     kind = kind_of(video) if video.get("kind") == "file" else None
