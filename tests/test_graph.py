@@ -142,6 +142,7 @@ def test_probe_output_is_read_and_refused_plainly():
         "fps": 29.97,
         "audio": True,
         "video": True,
+        "image": False,
     }
     song = {
         "streams": [
@@ -149,6 +150,72 @@ def test_probe_output_is_read_and_refused_plainly():
             {"codec_type": "video", "disposition": {"attached_pic": 1}},
         ]
     }
-    assert graph.parse_info(song) == {"duration": 3, "width": 0, "height": 0, "fps": 0.0, "audio": True, "video": False}
+    assert graph.parse_info(song) == {
+        "duration": 3, "width": 0, "height": 0, "fps": 0.0, "audio": True, "video": False, "image": False
+    }  # fmt: skip
     with pytest.raises(ValueError):
         graph.parse_info({"streams": []})
+
+
+def test_a_photo_is_a_picture_with_no_length():
+    photo = {
+        "streams": [{"codec_type": "video", "codec_name": "mjpeg", "width": 4000, "height": 3000, "nb_frames": "1"}],
+        "format": {"format_name": "image2", "duration": "0.040000"},
+    }
+    assert graph.parse_info(photo) == {
+        "duration": 0.0, "width": 4000, "height": 3000, "fps": 0.0, "audio": False, "video": True, "image": True
+    }  # fmt: skip
+    png = {"streams": [{"codec_type": "video", "codec_name": "png", "width": 64, "height": 64}],
+           "format": {"format_name": "png_pipe"}}  # fmt: skip
+    assert graph.parse_info(png)["image"] is True
+    # An animated GIF has frames and a length: a video.
+    moving = {"streams": [{"codec_type": "video", "width": 64, "height": 64, "nb_frames": "40", "avg_frame_rate": "10/1"}],
+              "format": {"format_name": "gif", "duration": "4"}}  # fmt: skip
+    assert graph.parse_info(moving)["image"] is False and graph.parse_info(moving)["duration"] == 4
+
+
+def test_a_place_is_a_box_in_the_frame_or_nothing():
+    assert graph.place_of(None) is None and graph.place_of({"x": 0, "y": 0, "w": 100, "h": 100}) is None
+    assert graph.place_of('{"x": 62, "y": 62, "w": 34, "h": 34}') == {"x": 62, "y": 62, "w": 34, "h": 34}
+    assert graph.place_of({"x": 90, "y": 90, "w": 50, "h": 50}) == {"x": 50, "y": 50, "w": 50, "h": 50}
+    # Fitted into its place, centred there, shape kept: a square source in a wide box.
+    assert graph.placed(piece(width=100, height=100), 640, 360) == (360, 360, 140, 0)
+    small = piece(width=100, height=100, place={"x": 50, "y": 50, "w": 50, "h": 50})
+    assert graph.placed(small, 640, 360) == (180, 180, 390, 180)
+    assert graph.framed(small, 640, 360).endswith("format=yuva420p,pad=640:360:390:180:black@0")
+    assert graph.framed(piece(), 640, 360) == "scale=640:360,setsar=1,pad=640:360:0:0:black,format=yuv420p"
+
+
+def test_what_is_seen_is_the_filling_piece_and_the_small_ones_over_it():
+    bottom, full, small = (
+        piece("V1", 0, 4),
+        piece("V2", 0, 4),
+        piece("V3", 0, 4, place={"x": 50, "y": 50, "w": 40, "h": 40}),
+    )
+    tracks = [{"id": "V3", "kind": "video"}, {"id": "V2", "kind": "video"}, {"id": "V1", "kind": "video"}]
+    assert graph.layers_at([bottom, full, small], tracks, 1) == [full, small]
+    assert graph.layers_at([bottom, small], tracks, 1) == [bottom, small]
+    assert graph.layers_at([small], tracks, 1) == [small] and graph.layers_at([small], tracks, 5) == []
+
+
+def test_a_photo_is_looped_and_a_placed_piece_lies_over_the_rest():
+    photo = piece("V2", 1, 2, path="/m/sun.jpg", image=True, audio=False, width=300, height=200,
+                  place={"x": 60, "y": 60, "w": 30, "h": 30})  # fmt: skip
+    pieces = [piece("V1", 0, 4), photo]
+    project = {"width": 640, "height": 360, "fps": 25}
+    command = graph.export_command("ffmpeg", project, pieces, "mp4", "project", "/out.mp4")
+    k = command.index("/m/sun.jpg")
+    assert command[k - 7 : k - 1] == ["-loop", "1", "-framerate", "25", "-t", "2.1"]
+    said = command[command.index("-filter_complex") + 1]
+    assert "format=yuva420p,pad=640:360:" in said and "black@0" in said
+    assert said.count("overlay=0:0:eof_action=pass:format=auto") == 2
+    # One moment: the photo over the clip, two inputs, the photo without a seek.
+    frame = graph.frame_command("ffmpeg", project, pieces, 2, 320)
+    assert frame.count("-i") == 2 and frame[frame.index("/m/sun.jpg") - 1] == "-i"
+    assert frame[frame.index("-ss") + 1] == "2"
+    graphed = frame[frame.index("-filter_complex") + 1]
+    assert "[l0][l1]overlay=0:0:format=auto[s1]" in graphed and graphed.startswith("[0:v]scale=640:360")
+    # A placed piece alone is drawn over black.
+    alone = graph.frame_command("ffmpeg", project, [photo], 2, 320)
+    assert alone[alone.index("-filter_complex") + 1].startswith("color=c=black")
+    assert graph.source_command("ffmpeg", "/m/sun.jpg", 3, 100, image=True)[5:7] == ["-i", "/m/sun.jpg"]

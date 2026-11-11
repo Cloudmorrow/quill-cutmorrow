@@ -94,7 +94,13 @@ def test_a_sound_goes_on_the_first_audio_track_and_other_files_are_refused(q):
     assert q.act("edit-video", a_file(q, "song.mp3")).ok
     (piece,) = q.list(PIECE)
     assert piece["track"] == "A1"
-    assert "neither a video nor a sound" in q.act("edit-video", a_file(q, "notes.txt")).error
+    assert "neither a video, a photo nor a sound" in q.act("edit-video", a_file(q, "notes.txt")).error
+
+
+def test_a_photo_goes_on_v1_for_five_seconds(q):
+    assert q.act("edit-video", a_file(q, "sun.jpg")).ok
+    (piece,) = q.list(PIECE)
+    assert piece["track"] == "V1" and float(piece["length"]) == 5.0
 
 
 def test_export_needs_pieces_and_queues_once_with_its_settings(q):

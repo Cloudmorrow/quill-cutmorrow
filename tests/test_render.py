@@ -132,8 +132,12 @@ def timeline(tmp_path_factory):
     b = make(tmp / "b.mp4", "testsrc2=size=320x180:rate=25:duration=2", "sine=frequency=660:duration=2")
     c = make(tmp / "c.mp4", "color=c=red:size=160x160:rate=25:duration=2", audio=False)
     song = make(tmp / "song.m4a", "sine=frequency=220:duration=4")
+    # A photo: a white square, in a corner of the picture from 2.2 s.
+    photo = tmp / "sun.png"
+    PIL.new("RGB", (80, 80), (255, 255, 255)).save(photo)
     store = FakeStore(tmp)
     files = {p.name: store.file(p) for p in (a, b, c, song)}
+    files["sun.png"] = store.file(photo, "Photos")
     project = store.add(
         PROJECT,
         {"name": "Holiday cut", "status": "editing", "crop": {"x": 0, "y": 0, "w": 75, "h": 100},
@@ -148,6 +152,8 @@ def timeline(tmp_path_factory):
                       "offset": 0, "length": "1"})  # fmt: skip
     store.add(PIECE, {"project": pid, "track": "A1", "source": files["song.m4a"]["id"], "name": "song.m4a",
                       "start": 0.5, "offset": 0, "length": 3, "volume": 0.5})  # fmt: skip
+    store.add(PIECE, {"project": pid, "track": "V2", "source": files["sun.png"]["id"], "name": "sun.png",
+                      "start": 2.2, "offset": 0, "length": None, "place": {"x": 0, "y": 0, "w": 25, "h": 50}})  # fmt: skip
     store.add(EFFECT, {"piece": first["id"], "kind": "blur", "label": "Face", "strength": 40,
                        "keyframes": [{"t": 0, "x": 5, "y": 5, "w": 40, "h": 50}, {"t": 2, "x": 30, "y": 30, "w": 40, "h": 50}]})  # fmt: skip
     renderer = render.Renderer(store, tmp / "work")
@@ -164,6 +170,10 @@ def test_filling_in_gives_pieces_their_length_and_the_project_its_picture(timeli
     known = {m["fields"]["name"]: m["fields"] for m in store.records(render.MEDIA)}
     assert known["a.mp4"]["duration"] == 3.0 and known["a.mp4"]["audio"] is True, "remembered for the Video screen"
     assert known["b.mp4"]["video"] is True and abs(known["b.mp4"]["duration"] - 2.0) < 0.1
+    # A photo has no length of its own: it stays five seconds, and is remembered as a photo.
+    sun = next(p for p in store.records(PIECE) if p["fields"]["name"] == "sun.png")
+    assert sun["fields"]["length"] == 5.0
+    assert known["sun.png"]["image"] is True and known["sun.png"]["duration"] == 0.0
 
 
 def test_the_export_is_one_file_in_the_exports_folder_cut_cropped_and_blurred(timeline, tmp_path):
@@ -183,7 +193,7 @@ def test_the_export_is_one_file_in_the_exports_folder_cut_cropped_and_blurred(ti
     streams = {s["codec_type"]: s for s in info["streams"]}
     assert set(streams) == {"video", "audio"}
     assert (streams["video"]["width"], streams["video"]["height"]) == (240, 180), "75% of 320 wide: the crop"
-    assert abs(float(info["format"]["duration"]) - 5.0) < 0.2
+    assert abs(float(info["format"]["duration"]) - 7.2) < 0.2, "the photo runs to 7.2 s"
 
     # At 0.4 s the blur's box is at 10%, 10%, 40% × 50% of 320 × 180: inside smooth, outside sharp.
     picture = frame_at(path, 0.4, tmp_path)
@@ -193,8 +203,12 @@ def test_the_export_is_one_file_in_the_exports_folder_cut_cropped_and_blurred(ti
     # V2's red square covers V1 from 1.5 s, letterboxed; at 2.7 s there is nothing: black.
     over = frame_at(path, 2.0, tmp_path)
     assert over.getpixel((160, 90)) < 120 and over.getpixel((10, 90)) < 30, "red in the middle, bars at the side"
+    # At 2.7 s nothing is on V1 and the photo sits small in the top left of V2: white there, black beside it.
     gap = frame_at(path, 2.7, tmp_path)
-    assert max(gap.tobytes()) < 40
+    assert gap.getpixel((30, 45)) > 200 and gap.getpixel((200, 150)) < 40
+    # From 3 s the photo lies over b.mp4: the clip shows where the photo is not.
+    over = frame_at(path, 3.5, tmp_path)
+    assert over.getpixel((30, 45)) > 200 and max(over.crop((120, 100, 238, 178)).tobytes()) > 40
 
     # A second export of the same name does not overwrite the first.
     store.patch(PROJECT, project["id"], {"status": "queued", "format": "m4a"})
@@ -223,7 +237,9 @@ def test_the_frames_api_answers_info_source_and_frame(timeline):
         a = next(f for f in store.records(FILE) if f["fields"]["name"] == "a.mp4")
         with urllib.request.urlopen(f"{base}/info?file={a['id']}", timeout=30) as answer:
             info = json.loads(answer.read())
-        assert info == {"duration": 3.0, "width": 320, "height": 180, "fps": 25.0, "audio": True, "video": True}
+        assert info == {
+            "duration": 3.0, "width": 320, "height": 180, "fps": 25.0, "audio": True, "video": True, "image": False
+        }  # fmt: skip
 
         with urllib.request.urlopen(f"{base}/frame?project={project['id']}&t=0.4&w=200", timeout=30) as answer:
             assert answer.headers["Content-Type"] == "image/jpeg"
@@ -232,6 +248,15 @@ def test_the_frames_api_answers_info_source_and_frame(timeline):
 
         with urllib.request.urlopen(f"{base}/source?file={a['id']}&t=1&w=160", timeout=30) as answer:
             assert PIL.open(io.BytesIO(answer.read())).size == (160, 90)
+        sun = next(f for f in store.records(FILE) if f["fields"]["name"] == "sun.png")
+        with urllib.request.urlopen(f"{base}/info?file={sun['id']}", timeout=30) as answer:
+            assert json.loads(answer.read())["image"] is True
+        with urllib.request.urlopen(f"{base}/source?file={sun['id']}&t=1&w=40", timeout=30) as answer:
+            assert PIL.open(io.BytesIO(answer.read())).size == (40, 40)
+        # The cut at 2.7 s: the photo in the top left corner, black beside it (the crop keeps 75% across).
+        with urllib.request.urlopen(f"{base}/frame?project={project['id']}&t=2.7&w=240", timeout=30) as answer:
+            drawn = PIL.open(io.BytesIO(answer.read())).convert("L")
+        assert drawn.getpixel((30, 45)) > 200 and drawn.getpixel((200, 150)) < 40
 
         # Somebody else is shown nothing of the administrator's.
         request = urllib.request.Request(

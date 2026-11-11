@@ -6,9 +6,10 @@ through the record API as the administrator who installed CutMorrow:
 - **the frames API** (`[[apis]] id = "frames"`): an HTTP server on `$PORT`,
   which the core forwards `/api/q/cutmorrow/frames/…` to. `info` is what
   ffprobe says about a file, `source` a frame of one, `frame` a frame of a
-  project's cut — the top video track's piece fitted, its blurs drawn, the
-  crop applied. Each answers in well under the core's 30 seconds once the
-  file is in the cache;
+  project's cut — every piece seen at that moment, a clip or a photo fitted
+  into the frame or sitting small in its place over what is under it, its
+  blurs drawn, the crop applied. Each answers in well under the core's 30
+  seconds once the file is in the cache;
 - **filling in**: a piece with no length gets its source's (from its
   offset on); a project with no size or frame rate gets its first video's;
 - **exports**: a project whose status is *queued* is rendered with one
@@ -208,11 +209,11 @@ class Renderer:
             path = self.store.path_of(file)
             result = run(graph.probe_command(self.ffprobe, str(path)), timeout=FRAME_TIMEOUT)
             if result.returncode != 0:
-                raise Refused(422, f"not a video or a sound the server can read: {failed_said(result)}")
+                raise Refused(422, f"not a video, a photo or a sound the server can read: {failed_said(result)}")
             try:
                 self._info[key] = graph.parse_info(json.loads(result.stdout or "{}"))
             except (ValueError, json.JSONDecodeError) as exc:
-                raise Refused(422, f"not a video or a sound the server can read: {exc}") from None
+                raise Refused(422, f"not a video, a photo or a sound the server can read: {exc}") from None
             self.remember(file, self._info[key])
         return dict(self._info[key])
 
@@ -234,6 +235,8 @@ class Renderer:
         info = self.info(file)
         if not info["video"]:
             raise Refused(422, "it has no picture")
+        if info.get("image"):
+            return self._jpeg(graph.source_command(self.ffmpeg, str(self.store.path_of(file)), 0.0, width, image=True))
         t = min(max(0.0, t), max(0.0, info["duration"] - 1 / (info["fps"] or 25)))
         return self._jpeg(graph.source_command(self.ffmpeg, str(self.store.path_of(file)), t, width))
 
@@ -276,10 +279,12 @@ class Renderer:
                     if fields.get("volume") not in (None, "")
                     else 1.0,
                     "muted": bool(fields.get("muted")),
+                    "place": graph.place_of(fields.get("place")),
                     "path": str(self.store.path_of(file)),
                     "file": file,
                     "video": info["video"],
                     "audio": info["audio"],
+                    "image": bool(info.get("image")),
                     "width": info["width"],
                     "height": info["height"],
                     "fps": info["fps"],
@@ -293,7 +298,7 @@ class Renderer:
         """The project's picture: its own size and frame rate, or its first video's while it has none."""
         fields = dict(project["fields"])
         if not (fields.get("width") and fields.get("height") and graph.number(fields.get("fps"))):
-            first = next((p for p in sorted(pieces, key=lambda p: p["start"]) if p["video"]), None)
+            first = next((p for p in sorted(pieces, key=lambda p: p["start"]) if p["video"] and not p["image"]), None)
             if first is not None:
                 fields["width"] = fields.get("width") or first["width"]
                 fields["height"] = fields.get("height") or first["height"]
@@ -333,11 +338,15 @@ class Renderer:
                 log("piece", piece["id"], "-", exc)
                 continue
             if needs_length:
-                length = max(0.0, info["duration"] - graph.number(fields.get("offset")))
+                length = (
+                    graph.IMAGE_LENGTH
+                    if info.get("image")
+                    else max(0.0, info["duration"] - graph.number(fields.get("offset")))
+                )
                 self.store.patch(PIECE, piece["id"], {"length": round(length, 3)})
                 log("length of", fields.get("name"), "is", length)
             project = blank_projects.get(fields.get("project"))
-            if project is not None and info["video"]:
+            if project is not None and info["video"] and not info.get("image"):
                 f = project["fields"]
                 said = {
                     "width": f.get("width") or info["width"],

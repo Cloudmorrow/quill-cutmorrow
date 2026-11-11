@@ -3,8 +3,8 @@
 The editor itself is Cloudmorrow's timeline kit, declared in quill.toml:
 projects, the pieces on their tracks and the blurs on the pieces, with the
 kit's own field names. This is the rest, run in the sandbox as whoever
-presses it: starting a project from a video (a button on its sheet, in
-Media or Files), and asking for an export. The video itself is never touched here:
+presses it: starting a project from a video, a photo or a sound (a button
+on its sheet, in Media or Files), and asking for an export. The video itself is never touched here:
 services/render.py, a program beside the server, draws the frames, fills in
 lengths and sizes, and renders the exports.
 """
@@ -21,6 +21,9 @@ TRACKS = [
 ]
 VIDEO_SUFFIXES = (".mp4", ".mov", ".m4v", ".mkv", ".webm", ".avi", ".mts", ".m2ts", ".3gp", ".mpg", ".mpeg", ".ogv")
 AUDIO_SUFFIXES = (".mp3", ".m4a", ".aac", ".wav", ".flac", ".ogg", ".oga", ".opus", ".wma", ".aif", ".aiff")
+IMAGE_SUFFIXES = (".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tif", ".tiff", ".heic", ".heif", ".avif")
+# How long a photo stays on the timeline when it is added, in seconds (the kit's).
+IMAGE_LENGTH = 5.0
 FORMATS = {"mp4": "MP4", "webm": "WebM", "mov": "MOV", "gif": "GIF", "m4a": "M4A"}
 
 
@@ -34,13 +37,15 @@ def number(value, fallback=0.0):
 
 
 def kind_of(record):
-    """'video', 'audio', or None for a file that is neither."""
+    """'video', 'audio', 'image', or None for a file that is none of them."""
     name = str(record.get("name") or "").lower()
     mime = str(record.get("mime") or "")
     if mime.startswith("video/") or name.endswith(VIDEO_SUFFIXES):
         return "video"
     if mime.startswith("audio/") or name.endswith(AUDIO_SUFFIXES):
         return "audio"
+    if mime.startswith("image/") or name.endswith(IMAGE_SUFFIXES):
+        return "image"
     return None
 
 
@@ -63,13 +68,13 @@ def length_of(lengths, file):
 def edit_video(ctx, video, name=""):
     kind = kind_of(video) if video.get("kind") == "file" else None
     if kind is None:
-        return error(f"{video['name']} is neither a video nor a sound")
+        return error(f"{video['name']} is neither a video, a photo nor a sound")
     title = (name or "").strip() or str(video["name"]).rsplit(".", 1)[0]
     project = ctx.records.create(PROJECT, name=title, tracks=TRACKS, status="editing")
-    length = length_of(known_lengths(ctx), video)
+    length = IMAGE_LENGTH if kind == "image" else length_of(known_lengths(ctx), video)
     piece = {
         "project": project.id,
-        "track": "V1" if kind == "video" else "A1",
+        "track": "A1" if kind == "audio" else "V1",
         "source": video.id,
         "name": video["name"],
         "start": 0,
