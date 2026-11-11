@@ -1,7 +1,8 @@
-# CutMorrow: a video editor. The videos and sounds in My Files are its
-# material; a project lays pieces of them on video and audio tracks, cut,
-# trimmed and moved, with blurs that follow keyframes and a crop, and exports
-# a new file to My Files › CutMorrow Exports. The editor is Cloudmorrow's
+# CutMorrow: a video editor. The videos, photos and sounds in the drive are
+# its material; a project lays pieces of them on video and audio tracks,
+# cut, trimmed and moved, each as big as the picture or smaller over what is
+# under it, with blurs that follow keyframes and a crop, and exports a new
+# file to My Files › CutMorrow Exports. The editor is Cloudmorrow's
 # timeline kit, drawn on every surface; the pictures and the export come from
 # a service beside the server, with ffmpeg, which the install brings. See
 # CLAUDE.md for the format and the loop.
@@ -9,16 +10,18 @@
 [quill]
 id = "cutmorrow"
 name = "CutMorrow"
-version = "3.1.0"
-summary = "A video editor for the videos in your drive: cut, trim and arrange clips on video and audio tracks, blur what should not be seen, crop, and export."
+version = "3.2.0"
+summary = "A video editor for the videos and photos in your drive: drag clips and photos onto video and audio tracks, cut, trim and arrange them, put one small over another, blur what should not be seen, crop, and export."
 category = "personal"
 icon = "play"
 publisher = "Cloudmorrow"
 license = "AGPL-3.0-or-later"
 code = "quill.py"
 features = [
-  "Every video and sound in My Files is material: Edit this video, on a video in Media or Files, starts a project from it",
-  "A real timeline: video and audio tracks, pieces cut, trimmed, split, moved and rearranged; a higher video track covers a lower one",
+  "Every video, photo and sound in your drive is material, as tiles beside the picture: drag one onto a track where it should go, or tap it to put it at the playhead; another drive or share is chosen above them",
+  "Edit this video, on a video or a photo in Media or Files, starts a project from it",
+  "A real timeline: video and audio tracks, pieces cut, trimmed, split, moved and rearranged; a higher video track covers a lower one; a photo stays as long as you make it",
+  "Make a clip or a photo smaller and put it anywhere in the picture, over what is under it: a box dragged on the viewer, or numbers typed",
   "Sound from every piece, mixed: mute one, or set its volume",
   "Blur a face, a number plate or a screen with keyframes: the box moves and resizes in a straight line between them, and moves with its piece",
   "Crop the whole picture",
@@ -33,9 +36,10 @@ datamodels = ["file"]
 
 # -- screens -------------------------------------------------------------------------
 # The projects, and each one in the editor: Cloudmorrow's timeline kit
-# (docs/TIMELINE.md in the core). The material is every video and sound in
-# My Files. Looking through the videos is Media's: CutMorrow requires it,
-# and adds Edit this video to a video there.
+# (docs/TIMELINE.md in the core). The material is every video, photo and
+# sound in My Files, and in any other drive chosen in the editor. Looking
+# through the videos and photos is Media's: CutMorrow requires it, and adds
+# Edit this video to a video or a photo there.
 [[screens]]
 id = "editor"
 kit = "timeline"
@@ -49,14 +53,14 @@ frames = "frames"
 export = "export"
 
 # -- actions -------------------------------------------------------------------------
-# A video (or a sound) becomes a project with it on the first track: a
-# button on every file's sheet, so on a video opened in Media or Files.
+# A video (a photo, a sound) becomes a project with it on the first track:
+# a button on every file's sheet, so on one opened in Media or Files.
 [[actions]]
 id = "edit-video"
 label = "Edit this video"
 on = "file"
 tone = "primary"
-description = "Starts a project from this video or sound: all of it, on the first track of its kind."
+description = "Starts a project from this video, photo or sound: all of it, on the first track of its kind."
 [actions.fields]
 name = { kind = "string", description = "What to call the project; the file's name when left out" }
 

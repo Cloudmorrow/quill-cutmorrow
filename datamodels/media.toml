@@ -1,12 +1,12 @@
-# What the renderer read from a file in My Files › Videos with ffprobe, so
-# the Clips screen can say how long it is and a new project's piece starts
-# with its length. Written by the renderer only; a changed file is read again.
+# What the renderer read from a file in the drive with ffprobe, so a new
+# project's piece starts with its length. Written by the renderer only; a
+# changed file is read again. A photo has a size and no length.
 
 [datamodel]
 id = "cutmorrow.media"
 version = 1
 label = "Media"
-description = "What a video or sound in My Files › Videos is: its length, picture size, frame rate, and whether it has sound."
+description = "What a video, photo or sound in the drive is: its length, picture size, frame rate, and whether it has a picture, sound, or is a still photo."
 scopes = ["personal"]
 title = "name"
 
@@ -20,3 +20,4 @@ height = { kind = "int" }
 fps = { kind = "decimal", label = "Frames per second" }
 video = { kind = "bool", default = false, label = "Has a picture" }
 audio = { kind = "bool", default = false, label = "Has sound" }
+image = { kind = "bool", default = false, label = "Is a photo", description = "One still picture, with no length of its own" }

@@ -5,8 +5,10 @@ functions. The words are the timeline kit's (docs/TIMELINE.md in the core):
 
 - a *project* is a dict with `width`, `height`, `fps`, `tracks` and `crop`;
 - a *piece* is a dict with `track`, `start`, `offset`, `length`, `volume`,
-  `muted`, and what the renderer read from its source: `path`, `video`,
-  `audio`, `width`, `height`; and its `effects`;
+  `muted`, its `place` (where its picture goes in the frame, in percent, or
+  None for all of it), and what the renderer read from its source: `path`,
+  `video`, `audio`, `image` (a photo: one picture, as long as the piece),
+  `width`, `height`; and its `effects`;
 - an *effect* is a dict with `strength` (1 to 100) and `keyframes`: dicts
   with `t` (seconds from the piece's start) and `x`, `y`, `w`, `h` (percent
   of the frame, before the crop).
@@ -16,10 +18,12 @@ first and after the last it stays put. An effect is on from its first
 keyframe to its last, and through the whole piece when it has one.
 
 The export is one filter graph: a black canvas of the project's size for the
-whole cut; each video piece fitted onto it (letterboxed), its blurs drawn,
-and laid over the canvas from its start for its length, the bottom track
-first, so a higher track covers a lower one; then the crop, and the size
-asked for. Every audible piece's sound is delayed to its start and mixed.
+whole cut; each video piece fitted onto it (letterboxed, or inside its place
+with nothing around it, so what is under it shows), its blurs drawn, and
+laid over the canvas from its start for its length, the bottom track first,
+so a higher track covers a lower one; then the crop, and the size asked
+for. A photo is one picture looped for its length. Every audible piece's
+sound is delayed to its start and mixed.
 
 A blur is a mask: a small grey picture per effect, drawn by `geq` from the
 box's expressions in `T` (the piece's own time), scaled up to the frame and
@@ -35,6 +39,12 @@ from itertools import pairwise
 
 MASK_SCALE = 4  # a mask is drawn at a quarter of the frame, then scaled up
 MIN_BOX = 2
+# How long a photo stays on the timeline when nobody says, in seconds (the kit's).
+IMAGE_LENGTH = 5.0
+# What ffprobe calls a still picture's container.
+IMAGE_FORMATS = frozenset(
+    {"image2", "png_pipe", "jpeg_pipe", "webp_pipe", "bmp_pipe", "tiff_pipe", "gif", "heif", "avif", "jpegxl_pipe"}
+)
 GIF_FPS = 15.0
 TRACKS = [
     {"id": "V2", "kind": "video", "name": "Video 2"},
@@ -105,6 +115,18 @@ def keyframes_of(raw) -> list[dict]:
         except (KeyError, TypeError, ValueError):
             continue
     return sorted(out, key=lambda k: k["t"])
+
+
+def place_of(raw) -> dict | None:
+    """A piece's place in the frame, percent, kept inside it; None when it fills the frame."""
+    place = loaded(raw, None)
+    if not isinstance(place, dict):
+        return None
+    w, h = min(max(number(place.get("w"), 100), 2.0), 100.0), min(max(number(place.get("h"), 100), 2.0), 100.0)
+    x, y = min(max(number(place.get("x"), 0), 0.0), 100.0 - w), min(max(number(place.get("y"), 0), 0.0), 100.0 - h)
+    if (x, y, w, h) == (0.0, 0.0, 100.0, 100.0):
+        return None
+    return {"x": x, "y": y, "w": w, "h": h}
 
 
 def tracks_of(raw) -> list[dict]:
@@ -207,6 +229,19 @@ def fit(src_w: int, src_h: int, width: int, height: int) -> tuple[int, int, int,
     return w, h, (width - w) // 2 // 2 * 2, (height - h) // 2 // 2 * 2
 
 
+def placed(piece: dict, width: int, height: int) -> tuple[int, int, int, int]:
+    """Where a piece's picture lands on the frame: (w, h, x, y) — fitted into
+    its place, or into the whole frame (then `fit`, bars and all)."""
+    src_w, src_h = int(number(piece.get("width"))), int(number(piece.get("height")))
+    place = piece.get("place")
+    if not place:
+        return fit(src_w, src_h, width, height)
+    bx, by = even(place["x"] * width / 100, 0), even(place["y"] * height / 100, 0)
+    bw, bh = min(even(place["w"] * width / 100), width - bx), min(even(place["h"] * height / 100), height - by)
+    w, h, x, y = fit(src_w, src_h, max(MIN_BOX, bw), max(MIN_BOX, bh))
+    return w, h, min(bx + x, width - w), min(by + y, height - h)
+
+
 def box_px(keyframes: list[dict], t: float, width: int, height: int) -> tuple[int, int, int, int]:
     """The box at *t*, in whole, even pixels, kept on the frame."""
     x = value_at(points(keyframes, "x"), t) * width / 100
@@ -253,8 +288,20 @@ def video_layers(pieces: list[dict], tracks: list[dict]) -> list[dict]:
 
 def top_piece_at(pieces: list[dict], tracks: list[dict], t: float) -> dict | None:
     """What is seen at *t*: the piece on the highest video track there, or None (black)."""
-    on = [p for p in video_layers(pieces, tracks) if number(p["start"]) <= t < number(p["start"]) + number(p["length"])]
+    on = layers_at(pieces, tracks, t)
     return on[-1] if on else None
+
+
+def layers_at(pieces: list[dict], tracks: list[dict], t: float) -> list[dict]:
+    """Every piece seen at *t*, bottom to top: from the highest one that fills
+    the whole frame (what is under it cannot be seen) up through the placed
+    ones over it."""
+    on = [p for p in video_layers(pieces, tracks) if number(p["start"]) <= t < number(p["start"]) + number(p["length"])]
+    start = 0
+    for i, piece in enumerate(on):
+        if not piece.get("place"):
+            start = i
+    return on[start:]
 
 
 def audible(pieces: list[dict], tracks: list[dict]) -> list[dict]:
@@ -337,7 +384,7 @@ def export_command(ffmpeg: str, project: dict, pieces: list[dict], fmt: str, siz
     index: dict[int, int] = {}
     for piece in [*layers, *[p for p in heard if p not in layers]]:
         index[id(piece)] = len(index)
-        inputs += ["-ss", _num(number(piece["offset"])), "-t", _num(number(piece["length"]) + 0.1), "-i", piece["path"]]
+        inputs += source_input(piece, fps)
 
     lines: list[str] = []
     maps: list[str] = []
@@ -346,10 +393,9 @@ def export_command(ffmpeg: str, project: dict, pieces: list[dict], fmt: str, siz
         below = "[bg]"
         for i, piece in enumerate(layers):
             k, start, length = index[id(piece)], number(piece["start"]), number(piece["length"])
-            w, h, x, y = fit(int(number(piece.get("width"))), int(number(piece.get("height"))), width, height)
             lines.append(
                 f"[{k}:v]setpts=PTS-STARTPTS,fps={fps},trim=duration={_num(length)},"
-                f"scale={w}:{h},setsar=1,pad={width}:{height}:{x}:{y}:black,format=yuv420p[p{i}]"
+                f"{framed(piece, width, height)}[p{i}]"
             )
             effects = [{**e, "keyframes": keyframes_of(e.get("keyframes"))} for e in piece.get("effects") or []]
             blurred, out = blur_lines(effects, width, height, fps, length, f"[p{i}]", f"p{i}")
@@ -397,39 +443,75 @@ def frame_command(ffmpeg: str, project: dict, pieces: list[dict], t: float, out_
     width, height = canvas(project)
     cx, cy, cw, ch = crop_px(project.get("crop"), width, height)
     tail = f"crop={cw}:{ch}:{cx}:{cy},scale={even(out_width)}:-2,format=yuvj420p[out]"
-    piece = top_piece_at(pieces, tracks, t)
-    if piece is None:
+    layers = layers_at(pieces, tracks, t)
+    if not layers:
         graph = f"color=c=black:s={width}x{height}:d=1,format=yuv420p,{tail}"
         return _jpeg(ffmpeg, [], graph)
-    rel = t - number(piece["start"])
-    length = number(piece["length"])
-    at = number(piece["offset"]) + rel
-    w, h, x, y = fit(int(number(piece.get("width"))), int(number(piece.get("height"))), width, height)
-    seen = []
-    for effect in piece.get("effects") or []:
-        keyframes = keyframes_of(effect.get("keyframes"))
-        if on_at({"keyframes": keyframes}, rel, length):
-            seen.append({**effect, "keyframes": keyframes})
-    head = f"[0:v]scale={w}:{h},setsar=1,pad={width}:{height}:{x}:{y}:black,format=yuv420p"
-    if not seen:
-        return _jpeg(ffmpeg, ["-ss", _num(max(0.0, at)), "-i", piece["path"]], f"{head},{tail}")
-    outs = "".join(f"[c{i}]" for i in range(len(seen)))
-    lines = [f"{head},split={len(seen) + 1}[b]{outs}"]
-    previous = "[b]"
-    for i, effect in enumerate(seen):
-        bx, by, bw, bh = box_px(effect["keyframes"], rel, width, height)
-        r = radius(effect.get("strength", 20), width, height)
-        lines.append(f"[c{i}]crop={bw}:{bh}:{bx}:{by},{blur(r, bw, bh)}[bl{i}]")
-        lines.append(f"{previous}[bl{i}]overlay={bx}:{by}[o{i}]")
-        previous = f"[o{i}]"
-    lines.append(f"{previous}{tail}")
-    return _jpeg(ffmpeg, ["-ss", _num(max(0.0, at)), "-i", piece["path"]], ";".join(lines))
+    # One input per seen piece, at its own moment; a photo is its one picture.
+    inputs: list[str] = []
+    lines: list[str] = []
+    below = ""
+    if layers[0].get("place"):
+        lines.append(f"color=c=black:s={width}x{height}:d=1,format=yuv420p[bg]")
+        below = "[bg]"
+    for k, piece in enumerate(layers):
+        rel = t - number(piece["start"])
+        length = number(piece["length"])
+        if piece.get("image"):
+            inputs += ["-i", piece["path"]]
+        else:
+            inputs += ["-ss", _num(max(0.0, number(piece["offset"]) + rel)), "-i", piece["path"]]
+        seen = []
+        for effect in piece.get("effects") or []:
+            keyframes = keyframes_of(effect.get("keyframes"))
+            if on_at({"keyframes": keyframes}, rel, length):
+                seen.append({**effect, "keyframes": keyframes})
+        head = f"[{k}:v]{framed(piece, width, height)}"
+        if not seen:
+            lines.append(f"{head}[l{k}]")
+        else:
+            outs = "".join(f"[c{k}_{i}]" for i in range(len(seen)))
+            lines.append(f"{head},split={len(seen) + 1}[b{k}]{outs}")
+            previous = f"[b{k}]"
+            for i, effect in enumerate(seen):
+                bx, by, bw, bh = box_px(effect["keyframes"], rel, width, height)
+                r = radius(effect.get("strength", 20), width, height)
+                lines.append(f"[c{k}_{i}]crop={bw}:{bh}:{bx}:{by},{blur(r, bw, bh)}[bl{k}_{i}]")
+                lines.append(f"{previous}[bl{k}_{i}]overlay={bx}:{by}[o{k}_{i}]")
+                previous = f"[o{k}_{i}]"
+            lines.append(f"{previous}null[l{k}]")
+        if below:
+            lines.append(f"{below}[l{k}]overlay=0:0:format=auto[s{k}]")
+            below = f"[s{k}]"
+        else:
+            below = f"[l{k}]"
+    lines.append(f"{below}{tail}")
+    return _jpeg(ffmpeg, inputs, ";".join(lines))
 
 
-def source_command(ffmpeg: str, path: str, t: float, out_width: int) -> list[str]:
-    """A JPEG of a source's own frame at *t* on stdout, *out_width* wide."""
+def source_input(piece: dict, fps: str) -> list[str]:
+    """The input options for a piece's source, cut at the input: ffmpeg seeks
+    instead of decoding from the top; a photo is looped for the piece's length."""
+    length = _num(number(piece["length"]) + 0.1)
+    if piece.get("image"):
+        return ["-loop", "1", "-framerate", fps, "-t", length, "-i", piece["path"]]
+    return ["-ss", _num(number(piece["offset"])), "-t", length, "-i", piece["path"]]
+
+
+def framed(piece: dict, width: int, height: int) -> str:
+    """The filters that put a piece's picture on a frame-sized stream: fitted
+    into the whole frame with black bars, or into its place with nothing
+    (transparent) around it, so what is under it shows through."""
+    w, h, x, y = placed(piece, width, height)
+    if piece.get("place"):
+        return f"scale={w}:{h},setsar=1,format=yuva420p,pad={width}:{height}:{x}:{y}:black@0"
+    return f"scale={w}:{h},setsar=1,pad={width}:{height}:{x}:{y}:black,format=yuv420p"
+
+
+def source_command(ffmpeg: str, path: str, t: float, out_width: int, image: bool = False) -> list[str]:
+    """A JPEG of a source's own frame at *t* on stdout, *out_width* wide; a photo as it is."""
     graph = f"[0:v]scale={even(out_width)}:-2,format=yuvj420p[out]"
-    return _jpeg(ffmpeg, ["-ss", _num(max(0.0, t)), "-i", path], graph)
+    return _jpeg(ffmpeg, ["-i", path] if image else ["-ss", _num(max(0.0, t)), "-i", path], graph)
 
 
 def _jpeg(ffmpeg: str, inputs: list[str], graph: str) -> list[str]:
@@ -459,6 +541,19 @@ def parse_info(data: dict) -> dict:
     if not pictures and not sounds:
         raise ValueError("neither a picture nor a sound")
     picture = pictures[0] if pictures else {}
+    container = set(str((data.get("format") or {}).get("format_name") or "").split(","))
+    frames = number(picture.get("nb_frames"), 0) if picture else 0
+    if picture and not sounds and container & IMAGE_FORMATS and frames <= 1:
+        # A photo: one picture, no length of its own.
+        return {
+            "duration": 0.0,
+            "width": int(picture.get("width") or 0),
+            "height": int(picture.get("height") or 0),
+            "fps": 0.0,
+            "audio": False,
+            "video": True,
+            "image": True,
+        }
     durations = [number((data.get("format") or {}).get("duration"))]
     durations += [number(s.get("duration")) for s in (pictures[:1] + sounds[:1])]
     length = max(durations)
@@ -477,6 +572,7 @@ def parse_info(data: dict) -> dict:
         "fps": round(fps, 3) if fps else 0.0,
         "audio": bool(sounds),
         "video": bool(pictures),
+        "image": False,
     }
 
 
